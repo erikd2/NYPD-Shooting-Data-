@@ -1,0 +1,106 @@
+---
+title: "NYPD Shooting Incident Data Report"
+author: "Erik Dabagian"
+date: "2024-04-18"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+```
+
+## Step 1 - Import the data
+
+```{r get_data}
+file_name <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+```
+
+## Step 2 - Read in the data and remove unnecessary columns
+
+```{r import_data, message=FALSE}
+NYPDdata <- read_csv(file_name)
+NYPDdata = select(NYPDdata, -c('LOC_OF_OCCUR_DESC','PRECINCT','JURISDICTION_CODE','LOC_CLASSFCTN_DESC','STATISTICAL_MURDER_FLAG','X_COORD_CD','Y_COORD_CD','Latitude','Longitude','INCIDENT_KEY','Lon_Lat','LOCATION_DESC'))
+NYPDdata <- NYPDdata %>%
+  rename(date = 'OCCUR_DATE') %>%
+  mutate(date = mdy(date))
+```
+
+## Step 3 - Create a summary of the data
+
+```{r summary}
+summary(NYPDdata)
+```
+
+## Step 4 - Visualise the data
+
+```{r visualise}
+by_borough <- NYPDdata %>%
+  group_by(BORO, date) %>%
+  select(BORO, date)
+
+data_summary <- by_borough %>%
+  group_by(BORO) %>%
+  summarise(count = n())
+
+ggplot(by_borough, aes(x = BORO)) +
+  geom_bar(fill = "blue") +
+  labs(title = "Number of Incidents by Borough",
+       x = "Borough",
+       y = "Count")
+
+#Plot for shootings per 100000 people
+population = c(1472654, 2736074, 1694251, 2405464, 495747)
+data_summary$population <- population
+
+#Population numbers found from 2020 US census
+
+ggplot(data_summary, aes(x = BORO, y = ((count / population) * 100000))) +
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(title = "Number of Incidents by Borough",
+       x = "Borough",
+       y = "Incidents per 100,000 People")
+
+```
+
+## Step 5 - Analyze the data
+
+We see a higher rate of shootings in Brooklyn and the Bronx
+
+Shootings decrease over time, except for shortly after 2020 where it increases.
+
+A graph of the shooting trend of time with a prediction model overlayed in red.
+
+```{r Analysis}
+time_trend <- NYPDdata %>%
+  group_by(month = floor_date(date, "month")) %>%
+  summarise(total_shootings = n())
+
+ggplot(time_trend, aes(x = month, y = total_shootings)) +
+  geom_line() +
+  labs(title = "Trend of Shooting Incidents Over Time",
+       x = "Date",
+       y = "Total Shootings")
+
+mod <- lm(total_shootings ~ month, data = time_trend)
+prediction_trend <- time_trend %>% mutate(pred = predict(mod))
+
+ggplot(time_trend, aes(x = month, y = total_shootings)) +
+  geom_line() +
+  geom_line(data = prediction_trend, aes(x = month, y = pred), color = "red") +
+  labs(title = "Trend of Shooting Incidents Over Time",
+       x = "Date",
+       y = "Total Shootings")
+
+```
+
+## Step 6 - Conclusion and potential bias sources
+
+Looking at the graph of Count vs Borough we can see that Brooklyn and the Bronx have a much higher rate of shootings than the other three New York boroughs. Another trend we can see in the data is in the graph of the trend of shootings over time. Although the month to month total number of shootings has a high variable rate we can see a decrease in the trend of shooting over time, until shortly after 2020 when the shootings increase again.
+
+A potential source of bias from this data is that these are only the shootings that have been reported to the police. A shooting that wasn't reported to the police is unlikely to be included in this data.
+
